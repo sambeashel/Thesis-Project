@@ -70,8 +70,7 @@ RTC_DATA_ATTR int uart_flag = 0;
  * None
  *
 */
-void connectToWifi ()
-{
+void connectToWifi () {
 
     M5.Lcd.println ("Connecting to WiFi");
   
