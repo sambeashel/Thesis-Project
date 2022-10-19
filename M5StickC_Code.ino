@@ -215,17 +215,17 @@ char readFromDashboard () {
                 
                 // Iterate through JSON between beginning and end of "weather description" section to store this data in 'command_string' variable
                 for (int i = index_of_command_string; i < length_of_payload; i++) {
-                    // Cycle through the payload until the next quote mark if found
+                    	    // Cycle through the payload until the next quote mark if found
 		            if (payload[i] == '"') {
 		                break;
 		            }
 
-                    // If the character is not a ' " ' (quotation mark), then add it to the command_string
+                    	    // If the character is not a ' " ' (quotation mark), then add it to the command_string
 		            else {
 		                command_string[indexCounter] = payload[i];
 		            }
 
-                    // Increase the index counter variable
+                    	    // Increase the index counter variable
 		            indexCounter++;
 
 		        }
@@ -317,31 +317,31 @@ int readFromAPI () {
         int httpCode = client.GET ();
 
         if (httpCode > 0) {
-            // Extract the JSON from the API and store it in 'payload' variable
+                // Extract the JSON from the API and store it in 'payload' variable
 	        String payload = client.getString();
 
-            // Find the length of the JSON
+                // Find the length of the JSON
 	        int length_of_payload = payload.length();
 
-            // This variable counts the number of square brackets in the JSON
-            // This is important as the 'weather description' information is always
-            // located after the square bracket
+                // This variable counts the number of square brackets in the JSON
+                // This is important as the 'weather description' information is always
+                // located after the square bracket
 	        int square_bracket_counter = 0;
 
-            // This is the index of the beginning of the 'weather descrition' information
+                // This is the index of the beginning of the 'weather descrition' information
 	        int index_of_weather_activity = 0;
 
 	        // Find the weather descriptions - this will tell us if it is raining or not
 	        for (int i = 0; i < length_of_payload; i++) {
 
 	            // We need to find the index of the second '[' character, as this is where the weather
-                // description is always stored
+                    // description is always stored
 	            if (payload[i] == '[') {
 		            square_bracket_counter++;
 
 		            if (square_bracket_counter == WEATHERSTACK_API_SQUARE_BRACKET_NUMBER) {
-                        // + 2 because there is a quotation mark after the square bracket before the data begins
-                        // E.g. ( [" )
+                            // + 2 because there is a quotation mark after the square bracket before the data begins
+                            // E.g. ( [" )
 		                index_of_weather_activity = i + 2;	
 		                break;
 
@@ -355,28 +355,29 @@ int readFromAPI () {
             // 'IndexCounter' variable used to index the 'command_string' variable seen below
             int indexCounter = 0;
 
-            // This if statement will trigger if we have successfully found the 2nd square bracket in the JSON
+                // This if statement will trigger if we have successfully found the 2nd square bracket in the JSON
 	        if (square_bracket_counter == WEATHERSTACK_API_SQUARE_BRACKET_NUMBER) {
 
                 // Now we need to store the 'weather description' information (payload) in a string
                 for (int i = index_of_weather_activity; i < length_of_payload; i++) {
 
-                    // If we have found a quotation mark, the we know we are at the end of the
-                    // weather_description information.
-		            if (payload[i] == '"') {
-		                break;
+	            // If we have found a quotation mark, the we know we are at the end of the
+		    // weather_description information.
+		    if (payload[i] == '"') {
+		    break;
 		            
                     }
 
-                    // If we don't see a quotation mark, the add the information to the weather_activity array
-		            else {
-		                weather_activity[indexCounter] = payload[i];
+		    // If we don't see a quotation mark, the add the information to the weather_activity array
+		    else {
+			weather_activity[indexCounter] = payload[i];
 		            
                     }
                     
                     // Increment the index counter
-		            indexCounter++;
-		        }
+		    indexCounter++;
+		
+		}
 
                 // Add a null character to the end of the array to ensure that we have turned it into a string
                 weather_activity[indexCounter] = '\0';
@@ -405,16 +406,15 @@ int readFromAPI () {
             }
             
             // Delay for 500ms
-	        delay (500);
+	    delay (500);
 
-	    }
+	}
 
         // This will hit if there is an error in the HTTP request, it will return 0 if so.
         else {
             Serial2.print ("Error on HTTP request");
             return 0;
-
-	    }
+	}
 
     }
 
@@ -610,38 +610,38 @@ void loop () {
 
         // This will trigger if a message has been sent from the online dashboard
         if (uart_flag == 2) {
-	        char dashboard_flag;
+	    char dashboard_flag;
 
             // A print message for the screen
-	        M5.Lcd.println("Checking Dashboard");
+	    M5.Lcd.println("Checking Dashboard");
 
             // Read from the dashboard
-	        dashboard_flag = readFromDashboard();
+	    dashboard_flag = readFromDashboard();
 
-	        // Open the cover
-	        if (dashboard_flag == 'O') {
-	            Serial2.print('Y');
+	    // Open the cover
+	    if (dashboard_flag == 'O') {
+	        Serial2.print('Y');
 
-	        }
-
-	        // Close the cover
-	        if (dashboard_flag == 'C') {
-	            Serial2.print('N');
-
-	        }
-
-	        // Error/do nothing
-	        if (dashboard_flag == 'E') {
-	            Serial2.print('Z');
-
-	        }
 	    }
+
+	    // Close the cover
+	    if (dashboard_flag == 'C') {
+	        Serial2.print('N');
+
+	    }
+
+	    // Error/do nothing
+	    if (dashboard_flag == 'E') {
+	        Serial2.print('Z');
+
+	    }
+	}
 
         // Send data to thingspeak dashboard
         if (uart_flag == 3) {
-	        writeToAPI();
+	    writeToAPI();
 
-	    }
+	}
 
     }
 
