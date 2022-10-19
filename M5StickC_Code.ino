@@ -2,7 +2,7 @@
 *******************************************************************************
 * M5StickC Code for thesis (ENGG4811)
 * Smart Water Tank Cover
-$
+*
 * Name: Samuel Beashel
 * Date: 29/9/22
 * 
