@@ -9,8 +9,8 @@
 ******************************************************************************
 */
 
-#include <M5StickCPlus.h>
-//#include <M5StickC.h>
+//#include <M5StickCPlus.h>
+#include <M5StickC.h>
 #include <AXP192.h>
 #include <Arduino.h>
 #include <WiFi.h>
