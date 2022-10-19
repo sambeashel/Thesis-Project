@@ -9,8 +9,8 @@
 ******************************************************************************
 */
 
-//#include <M5StickCPlus.h>
-#include <M5StickC.h>
+#include <M5StickCPlus.h>
+//#include <M5StickC.h>
 #include <AXP192.h>
 #include <Arduino.h>
 #include <WiFi.h>
@@ -168,19 +168,19 @@ char readFromDashboard () {
         int httpCode = client.GET();
 
         if (httpCode > 0) {
-	        // Extract the JSON from the API and store it in 'payload' variable
-	        String payload = client.getString();
+          // Extract the JSON from the API and store it in 'payload' variable
+          String payload = client.getString();
 
-	        // Find the length of the JSON
-	        int length_of_payload = payload.length();
+          // Find the length of the JSON
+          int length_of_payload = payload.length();
 
-	        // If length == 2, then there is no data to be retreived because JSON is just "[ ]" - thus return 'E' 
+          // If length == 2, then there is no data to be retreived because JSON is just "[ ]" - thus return 'E' 
             // i.e. the JSON hasn't been updated as there has been no buttons pressed
-	        if (length_of_payload == LENGTH_OF_EMPTY_JSON) {
-	            M5.Lcd.println ("No Data");
-	            return 'E';
+          if (length_of_payload == LENGTH_OF_EMPTY_JSON) {
+              M5.Lcd.println ("No Data");
+              return 'E';
 
-	        }
+          }
 
             // Count the number of quotation marks in the JSON
             int quote_counter = 0;
@@ -188,21 +188,21 @@ char readFromDashboard () {
 
             // Find the command string in the JSON - the command string occurs after the 5th quotation mark
             for (int i = 0; i < length_of_payload; i++) {
-	            // We need to find the index of the fifth '"' character
-	            if (payload[i] == '"') {
-		            quote_counter++;
+              // We need to find the index of the fifth '"' character
+              if (payload[i] == '"') {
+                quote_counter++;
 
-		        }
+            }
 
                 // Find the index of the fifth quotation mark in the JSON. The information between the fifth and 
                 // sixth quotation marks is the request from the API i.e. shows if the cover needs to be opened/closed
                 if (quote_counter == THINGSPEAK_API_QUOTATION_NUMBER) {
-		            // + 1 because we want the character after the quotation mark
-		            index_of_command_string = i + 1;
-		            break;
+                // + 1 because we want the character after the quotation mark
+                index_of_command_string = i + 1;
+                break;
 
-		        }
-	        }
+            }
+          }
 
             // Now that we know the index of the start of the command inside the JSON, we need to store the
             // entire command section of the JSON inside command_string.
@@ -211,29 +211,29 @@ char readFromDashboard () {
             // 'IndexCounter' variable used to index the 'command_string' variable seen below
             int indexCounter = 0;
 
-	        if (quote_counter == WEATHER_DESCRIPTION_QUOTATION_NUMBER) {
+          if (quote_counter == THINGSPEAK_API_QUOTATION_NUMBER) {
                 
                 // Iterate through JSON between beginning and end of "weather description" section to store this data in 'command_string' variable
                 for (int i = index_of_command_string; i < length_of_payload; i++) {
-                    	    // Cycle through the payload until the next quote mark if found
-		            if (payload[i] == '"') {
-		                break;
-		            }
+                          // Cycle through the payload until the next quote mark if found
+                if (payload[i] == '"') {
+                    break;
+                }
 
-                    	    // If the character is not a ' " ' (quotation mark), then add it to the command_string
-		            else {
-		                command_string[indexCounter] = payload[i];
-		            }
+                          // If the character is not a ' " ' (quotation mark), then add it to the command_string
+                else {
+                    command_string[indexCounter] = payload[i];
+                }
 
-                    	    // Increase the index counter variable
-		            indexCounter++;
+                          // Increase the index counter variable
+                indexCounter++;
 
-		        }
+            }
 
-	            // Add a null character to the end of the 'command_string' so that it is actually a string
-	            command_string[indexCounter] = '\0';
+              // Add a null character to the end of the 'command_string' so that it is actually a string
+              command_string[indexCounter] = '\0';
 
-	        }
+          }
 
             // Print the API request (command_string) to the LCD display
             M5.Lcd.println (command_string);
@@ -243,32 +243,33 @@ char readFromDashboard () {
 
             // Check if the cover needs to be opened
             if (command_string[0] == 'O' and command_string[1] == 'P') {
+                writeToAPI();
                 M5.Lcd.println ("Open Sesame");
                 return 'O';
 
-	        }
+          }
 
             // Check if the cover needs to be closed
             if (command_string[0] == 'C' and command_string[1] == 'L') {
                 M5.Lcd.println ("Close Sesame");
                 return 'C';
 
-	        }
+          }
 
-	        // If the JSON didn't specify to open/close the cover, then return 'E'
-	        else {
-	            return 'E';
-	        
+          // If the JSON didn't specify to open/close the cover, then return 'E'
+          else {
+              return 'E';
+          
             }
 
-	        delay (500);
+          delay (500);
 
-	    }
+      }
 
         // This will hit if there is an error in the HTTP request, it will return 'E' if so.
         else {
-	        Serial2.print ("Error on HTTP request");
-	        return 'E';
+          Serial2.print ("Error on HTTP request");
+          return 'E';
         
         }
 
@@ -318,36 +319,36 @@ int readFromAPI () {
 
         if (httpCode > 0) {
                 // Extract the JSON from the API and store it in 'payload' variable
-	        String payload = client.getString();
+          String payload = client.getString();
 
                 // Find the length of the JSON
-	        int length_of_payload = payload.length();
+          int length_of_payload = payload.length();
 
                 // This variable counts the number of square brackets in the JSON
                 // This is important as the 'weather description' information is always
                 // located after the square bracket
-	        int square_bracket_counter = 0;
+          int square_bracket_counter = 0;
 
                 // This is the index of the beginning of the 'weather descrition' information
-	        int index_of_weather_activity = 0;
+          int index_of_weather_activity = 0;
 
-	        // Find the weather descriptions - this will tell us if it is raining or not
-	        for (int i = 0; i < length_of_payload; i++) {
+          // Find the weather descriptions - this will tell us if it is raining or not
+          for (int i = 0; i < length_of_payload; i++) {
 
-	            // We need to find the index of the second '[' character, as this is where the weather
+              // We need to find the index of the second '[' character, as this is where the weather
                     // description is always stored
-	            if (payload[i] == '[') {
-		            square_bracket_counter++;
+              if (payload[i] == '[') {
+                square_bracket_counter++;
 
-		            if (square_bracket_counter == WEATHERSTACK_API_SQUARE_BRACKET_NUMBER) {
+                if (square_bracket_counter == WEATHERSTACK_API_SQUARE_BRACKET_NUMBER) {
                             // + 2 because there is a quotation mark after the square bracket before the data begins
                             // E.g. ( [" )
-		                index_of_weather_activity = i + 2;	
-		                break;
+                    index_of_weather_activity = i + 2;  
+                    break;
 
-		            }
-		        }       
-	        }
+                }
+            }       
+          }
 
             // Stores the weather activity section of the JSON
             char weather_activity[ARRAY_SIZE];
@@ -356,33 +357,33 @@ int readFromAPI () {
             int indexCounter = 0;
 
                 // This if statement will trigger if we have successfully found the 2nd square bracket in the JSON
-	        if (square_bracket_counter == WEATHERSTACK_API_SQUARE_BRACKET_NUMBER) {
+          if (square_bracket_counter == WEATHERSTACK_API_SQUARE_BRACKET_NUMBER) {
 
                 // Now we need to store the 'weather description' information (payload) in a string
                 for (int i = index_of_weather_activity; i < length_of_payload; i++) {
 
-	            // If we have found a quotation mark, the we know we are at the end of the
-		    // weather_description information.
-		    if (payload[i] == '"') {
-		    break;
-		            
+              // If we have found a quotation mark, the we know we are at the end of the
+        // weather_description information.
+        if (payload[i] == '"') {
+        break;
+                
                     }
 
-		    // If we don't see a quotation mark, the add the information to the weather_activity array
-		    else {
-			weather_activity[indexCounter] = payload[i];
-		            
+        // If we don't see a quotation mark, the add the information to the weather_activity array
+        else {
+      weather_activity[indexCounter] = payload[i];
+                
                     }
                     
                     // Increment the index counter
-		    indexCounter++;
-		
-		}
+        indexCounter++;
+    
+    }
 
                 // Add a null character to the end of the array to ensure that we have turned it into a string
                 weather_activity[indexCounter] = '\0';
 
-	        }
+          }
             
             // Some print messages for the LCD display on the M5StickC
             M5.Lcd.println("We are in");
@@ -399,6 +400,9 @@ int readFromAPI () {
                     M5.Lcd.println ("LOWELL RAINS");
                     Serial2.print ('Y');
 
+                    // Update the web dashboard to show cover opening
+                    writeToAPI();
+
                     // If there is rain, then return 1
                     return 1;
 
@@ -406,15 +410,15 @@ int readFromAPI () {
             }
             
             // Delay for 500ms
-	    delay (500);
+      delay (500);
 
-	}
+  }
 
         // This will hit if there is an error in the HTTP request, it will return 0 if so.
         else {
             Serial2.print ("Error on HTTP request");
             return 0;
-	}
+  }
 
     }
 
@@ -463,6 +467,7 @@ int scanUART () {
 
         // Store any received character inside the 'receivedString' variable
         char receivedString = Serial2.read();
+        
 
         // Some printed messages to the LCD screen
         M5.Lcd.println("rec string");
@@ -472,8 +477,9 @@ int scanUART () {
         // If an 'R' is received, then we need to check the WeatherStack API for weather data.
         // Thus return 1
         if (receivedString == 'R') {
-	        uart_flag = 1;
-	        return 1;
+          M5.Lcd.print("received R");
+          uart_flag = 1;
+          return 1;
         }
 
         // If a 'D' is received, then we need to check the the ThingSpeak dashboard for any button presses
@@ -498,7 +504,7 @@ int scanUART () {
             uart_flag = 3;
             return 3;
 
-	    }
+      }
 
         // This will trigger if there is an invalid message received from the Raspberry Pi Pico. Thus, nothing will happen.
         uart_flag = 0;
@@ -538,8 +544,8 @@ void setup () {
     M5.Lcd.fillScreen (BLACK);
 
     // Turn off the screen
-    M5.Lcd.writecommand(ST7735_DISPOFF);
-    M5.Axp.ScreenBreath(0);
+    //M5.Lcd.writecommand(ST7735_DISPOFF);
+    //M5.Axp.ScreenBreath(0);
 
     // Set the deep sleep wakeup to be when GPIO pin 36 reads a high input
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, HIGH_INPUT);
@@ -571,13 +577,13 @@ void loop () {
         while (scanUART() == -1) {
 
             // Take the current time in ticks
-	        long int current_time = millis();
+          long int current_time = millis();
 
             // If there is no message received from the Raspberry Pi Pico after 20 seconds
             // then go back to deep sleep
-	        if (current_time - start_time >= 20000) {
-	            esp_deep_sleep_start();
-	        
+          if (current_time - start_time >= 20000) {
+              esp_deep_sleep_start();
+          
             }
        
         }
@@ -592,56 +598,56 @@ void loop () {
 
         // If the uart_flag == 1, then there has been a message to read the WeatherStack API
         if (uart_flag == 1) {
-	        // Read from the API to check if it's raining
-	        if (readFromAPI() == 1) {
-                // Send a message to the Raspberry Pi Pico to open the cover
-	            Serial2.print('Y');
+          // Read from the API to check if it's raining
+          if (readFromAPI() == 1) {
+              // Send a message to the Raspberry Pi Pico to open the cover
+              Serial2.print('Y');
 
-	        }
-	    
+          }
+      
             else {
                 // Send a message to the Raspberry Pi Pico to close the cover
-	            Serial2.print('N');
+              Serial2.print('N');
                 
-	        }
+          }
 
-	    }
+      }
 
 
         // This will trigger if a message has been sent from the online dashboard
         if (uart_flag == 2) {
-	    char dashboard_flag;
+      char dashboard_flag;
 
             // A print message for the screen
-	    M5.Lcd.println("Checking Dashboard");
+      M5.Lcd.println("Checking Dashboard");
 
             // Read from the dashboard
-	    dashboard_flag = readFromDashboard();
+      dashboard_flag = readFromDashboard();
 
-	    // Open the cover
-	    if (dashboard_flag == 'O') {
-	        Serial2.print('Y');
+      // Open the cover
+      if (dashboard_flag == 'O') {
+          Serial2.print('Y');
 
-	    }
+      }
 
-	    // Close the cover
-	    if (dashboard_flag == 'C') {
-	        Serial2.print('N');
+      // Close the cover
+      if (dashboard_flag == 'C') {
+          Serial2.print('N');
 
-	    }
+      }
 
-	    // Error/do nothing
-	    if (dashboard_flag == 'E') {
-	        Serial2.print('Z');
+      // Error/do nothing
+      if (dashboard_flag == 'E') {
+          Serial2.print('Z');
 
-	    }
-	}
+      }
+  }
 
         // Send data to thingspeak dashboard
         if (uart_flag == 3) {
-	    writeToAPI();
+      writeToAPI();
 
-	}
+  }
 
     }
 
