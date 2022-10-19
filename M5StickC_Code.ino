@@ -313,7 +313,7 @@ int readFromAPI () {
         HTTPClient client;
 
         // Connect to the WeatherStack API
-        client.begin("http://api.weatherstack.com/current?access_key=51775c78bcde4910c305f71db159049e&query=Lowell");
+        client.begin("http://api.weatherstack.com/current?access_key=51775c78bcde4910c305f71db159049e&query=Tennyson");
         int httpCode = client.GET ();
 
         if (httpCode > 0) {
@@ -393,7 +393,7 @@ int readFromAPI () {
             for (int i = 1; i < sizeof (weather_activity) - 1; i++) {
 
                 // Check for the letters 'R' and 'a' next to each other
-                if ((weather_activity[i] == 'v') and (weather_activity[i - 1] == 'O')) {
+                if ((weather_activity[i] == 'a') and (weather_activity[i - 1] == 'R')) {
                     // Some print messages for the LCD of the M5StickC
                     M5.Lcd.println ("LOWELL RAINS");
                     Serial2.print ('Y');
@@ -538,8 +538,8 @@ void setup () {
     M5.Lcd.fillScreen (BLACK);
 
     // Turn off the screen
-    //M5.Lcd.writecommand(ST7735_DISPOFF);
-    //M5.Axp.ScreenBreath(0);
+    M5.Lcd.writecommand(ST7735_DISPOFF);
+    M5.Axp.ScreenBreath(0);
 
     // Set the deep sleep wakeup to be when GPIO pin 36 reads a high input
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, HIGH_INPUT);
