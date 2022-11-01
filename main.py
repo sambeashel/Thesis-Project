@@ -1,3 +1,32 @@
+Skip to content
+Search or jump to…
+Pull requests
+Issues
+Marketplace
+Explore
+ 
+@sambeashel 
+sambeashel
+/
+Thesis-Project
+Public
+Code
+Issues
+Pull requests
+Actions
+Projects
+Wiki
+Security
+Insights
+Settings
+Thesis-Project/M5StickC_Code.ino
+@sambeashel
+sambeashel Update M5StickC_Code.ino
+Latest commit d74a9b0 11 days ago
+ History
+ 1 contributor
+619 lines (457 sloc)  15.2 KB
+
 from machine import Pin, UART
 import time
 
@@ -48,11 +77,9 @@ wake_up_pin = Pin(11, Pin.OUT)
 
 """
 Reads the ADC pin connected to the rain sensor output
-
 Parameters:
 -----------
 None
-
 Returns:
 --------
 rain_sensor_value: int: The value of the rain sensor output
@@ -104,15 +131,12 @@ def clockwise_rotation():
 """
 Sets the direction pins connected to the stepper motor drivers
 to spin them anticlockwise.
-
 Notice how stepper 1 is set to '0' and stepper 2 is set to '1'
 This is because the steppers are facing opposite directions, thus
 their anticlockwise spin direction must be opposite.
-
 Parameters:
 -----------
 None
-
 Returns:
 --------
 None
@@ -127,11 +151,9 @@ def anticlockwise_rotation():
 """
 This rotates the first stepper which is associated with limit switches 1 (open) and 3 (close)
 by sending pulses to the stepper driver.
-
 Parameters:
 -----------
 None
-
 Returns:
 --------
 None
@@ -150,11 +172,9 @@ def rotate_stepper_one():
 """
 This rotates the second stepper which is associated with limit switches 2 (open) and 4 (close)
 by sending pulses to the stepper driver.
-
 Parameters:
 -----------
 None
-
 Returns:
 --------
 None
@@ -174,11 +194,9 @@ def rotate_stepper_two():
 This function rotates the steppers to change the position of the cover to OPEN
 The steppers will rotate until limit switches 1 and 2 have been hit by the gantry
 plate.
-
 Parameters:
 -----------
 None
-
 Returns:
 --------
 None
@@ -191,30 +209,27 @@ def open_cover():
 
     # Rotate the steppers until limit switches 1 and 2 are closed
     while True:
-        if not limit_switch_one.value():
+        if not limit_switch_two.value():
             rotate_stepper_one()
             
         if not limit_switch_two.value():
             rotate_stepper_two()
             
-        if limit_switch_one.value() and limit_switch_two.value():
+        if limit_switch_two.value():
             return
         
         # Incase the limit switches haven't closed after 37 seconds, then stop them 
         # (as there may be a hardware error)
         if time.time() - start_time > 37:
             return
-
         
 """
 This function rotates the steppers to change the position of the cover to OPEN
 The steppers will rotate until limit switches 3 and 4 have been hit by the gantry
 plate.
-
 Parameters:
 -----------
 None
-
 Returns:
 --------
 None
@@ -224,7 +239,6 @@ def close_cover():
     # Set the motors for clockwise rotation as we are opening the cover
     anticlockwise_rotation()
     start_time = time.time()
-
     # Rotate the steppers until limit switches 3 and 4 are closed
     while True:
         if not limit_switch_three.value():
@@ -244,16 +258,12 @@ def close_cover():
 """
 This function will be called when the cover is in the closed state.
 It reads both of the rain sensors and opens the cover accordingly.
-
 If the rain sensor is wet and the dew sensor is dry, the cover will open.
-
 If both sensors are wet, there may be dew or dew AND rain. Thus a message will
 be send to the M5StickC over UART to check the WeatherStack API.
-
 Parameters:
 -----------
 None
-
 Returns:
 --------
 0: Cover Closed
@@ -299,6 +309,7 @@ def cover_closed_rain_sensor_check():
         
         # If string == y, then API says rain is present
         if(serial_string == b'Y'):
+            print("API detects rain")
             send_to_dashboard()
             open_cover()
     
@@ -454,18 +465,13 @@ def read_uart(string_to_send):
 
 """
 This function whenever we need to check the ThingSpeak dashboard
-
 It firstly calls the check_online_dashboard() function, and then based on
 what this function returns, it opens/closes the cover.
-
 If it opens the cover, it will also send a message to the M5StickC to update
 the ThingSpeak dashboard 'Total Times Cover Opened' graph.
-
-
 Parameters:
 -----------
 cover_state: int: The current state of the cover (OPEN/CLOSED)
-
 Returns:
 --------
 cover_state: int: The new state of the cover (OPEN/CLOSED)
@@ -513,14 +519,11 @@ def dashboard_action(cover_state):
 
 """
 This function whenever we need to check the rain sensor values
-
 It firstly calls the cover_open_rain_sensor_check() or cover_closed_rain_sensor_check()
 functions, and then based on what these functions return, the cover will either open or close.
-
 Parameters:
 -----------
 cover_state: int: The current state of the cover (OPEN/CLOSED)
-
 Returns:
 --------
 cover_state: int: The new state of the cover (OPEN/CLOSED)
@@ -545,16 +548,12 @@ def rain_sensor_action(cover_state):
 
 """
 This function sends data to the web dashboard when the cover is opened.
-
 Each time the cover is opened, the 'Total Times Cover Opened' graph on the 
 ThingSpeak dashboard needs to be updated.
-
 The letter 'T' is sent to the dashboard for 'ThingSpeak'
-
 Parameters:
 -----------
 None
-
 Returns:
 --------
 None
@@ -572,11 +571,9 @@ def send_to_dashboard():
 
 """
 This is the main loop of the program.
-
 Parameters:
 -----------
 None
-
 Returns:
 --------
 None
