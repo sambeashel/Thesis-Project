@@ -1,619 +1,665 @@
-from machine import Pin, UART
-import time
+/*
+*******************************************************************************
+* Title: M5StickC Code for Thesis Project (ENGG4811)
+* Project: Farmbot Smart Water Tank Cover
+*
+* Institution: The University of Queensland
+*
+* Name: Samuel Beashel
+* Date: 29/9/22
+* 
+******************************************************************************
+*/
 
-# Define Constants
-ADC_RAIN_THRESHOLD = 50000
+#include <M5StickCPlus.h>
+//#include <M5StickC.h>
+#include <AXP192.h>
+#include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiMulti.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 
-# Global Variables
-global OPEN
-global CLOSED
+// This converts micro seconds to seconds
+#define uS_TO_S_FACTOR 1000000
 
-OPEN = 0
-CLOSED = 1
+// This is the time the M5StickC will sleep (seconds)
+#define TIME_TO_SLEEP  100
+
+// If the M5StickC exceeds this time when connecting the WiFi, it will sleep
+#define WIFI_TIMEOUT_MS 20000
+
+// API information for ThingSpeak dashboard
+#define API_SERVER_NAME "https://api.thingspeak.com/update"
+#define API_KEY_WRITE "api_key=HTACRL5G50VW4SYL&field1=1"
+
+#define WIFI_CONNECTED 1
+#define WIFI_CONNECTION_FAILED 0
+
+#define LENGTH_OF_EMPTY_JSON 2
+
+#define THINGSPEAK_API_QUOTATION_NUMBER 5
+#define WEATHERSTACK_API_SQUARE_BRACKET_NUMBER 2
+
+#define HIGH_INPUT 1
+
+#define ARRAY_SIZE 60
+
+#define GPIO_PIN_26_M5 26
+#define GPIO_PIN_0_M5 0
+
+// WiFi network credentials
+const char *WIFI_NETWORK_NAME = "Samuel's iPhone";
+const char *WIFI_PASSWORD = "beashel123";
+
+// Global counter of how many times sleep mode has been activated
+// RTC_DATA_ATTR is used so this is kept in memorynot  during deep sleep
+RTC_DATA_ATTR int sleep_count = 0;
+RTC_DATA_ATTR int uart_flag = 0;
 
 
-# Initialise Pins
+/*
+ * This function connects the M5 to the specified WiFi network in 
+ * WIFI_NETWORK_NAME and WIFI_PASSWORD
+ *
+ * Parameters
+ * ----------
+ * None
+ *
+ *
+ * Returns
+ * -------
+ * None
+ *
+*/
+void connectToWifi () {
 
-# Set direction pins for motor
-dir_pin_one = Pin(3, Pin.OUT)
-dir_pin_two = Pin(5, Pin.OUT)
+    M5.Lcd.println ("Connecting to WiFi");
+  
+    // Define M5Stick as a station (this will not be an access point)
+    WiFi.mode (WIFI_STA);
+
+    // Connect to the WiFi
+    WiFi.begin (WIFI_NETWORK_NAME, WIFI_PASSWORD);
     
-# Set step pins for motor
-step_pin_one = Pin(2, Pin.OUT)
-step_pin_two = Pin(4, Pin.OUT)
+    // Measure the elapsed time and timeout if greater than WIFI_TIMEOUT_MS
+    unsigned long start_attempt_time = millis ();
 
-# Set LED as an output
-led_pin = Pin(25, Pin.OUT)
+    while (WiFi.status () != WL_CONNECTED && millis () - start_attempt_time < WIFI_TIMEOUT_MS)
+    {
+      delay (500);
+    }
 
-# Set limit switch pin as an input
-limit_switch_one = Pin(21, Pin.IN, Pin.PULL_DOWN)
-limit_switch_two = Pin(20, Pin.IN, Pin.PULL_DOWN)
-limit_switch_three = Pin(19, Pin.IN, Pin.PULL_DOWN)
-limit_switch_four = Pin(18, Pin.IN, Pin.PULL_DOWN)
+    // Check status of connection
+    if (WiFi.status () != WL_CONNECTED) {
+        Serial2.print ("WiFi Connection Failed");
+        
+    }
 
-# Set up ADC pins
-rain_sensor = machine.ADC(28)
-dew_sensor = machine.ADC(27)
+    // This occurrs if connected to WiFi
+    else {
+      M5.Lcd.println ("Connected!");
 
-# This stores the analog value from the rain sensors
-rain_sensor_value = 0
-dew_sensor_value = 0
-
-# Define UART pin
-uartPin = UART(0, 115200)
-
-# Define the wake up pin
-wake_up_pin = Pin(11, Pin.OUT)
+    }
+}
 
 
-"""
-Reads the ADC pin connected to the rain sensor output
+/*
+ * This function writes a string to the ThingSpeak web dashboard
+ * at API_SERVER_NAME and API_KEY_WRITE.
+ * 
+ * Every time the cover is opened, a '1' is sent to the API.
+ * ThingSpeak API then updates the 'Total Times Cover Opened' graph
+ * by adding a new data point.
+ *
+ * Parameters
+ * ----------
+ * None
+ *
+ *
+ * Returns
+ * -------
+ * None
+ *
+*/
+void writeToAPI () {
+  HTTPClient client;
 
-Parameters:
------------
-None
+  client.begin (API_SERVER_NAME);
+  M5.Lcd.println ("we are sending");
+  client.POST (API_KEY_WRITE);
+  M5.Lcd.println ("DATA SENT");
+  client.end ();
 
-Returns:
---------
-rain_sensor_value: int: The value of the rain sensor output
-"""
-def read_rain_sensor():
-    rain_sensor_value = rain_sensor.read_u16()
-    return rain_sensor_value
+}
+
+
+/*
+ * This function connects to the ThingSpeak web dashboard and pulls data from it
+ * related to the 'open' and 'close' buttons.
+ *
+ * E.g. if the 'open' button is pressed, this function will read the JSON data in
+ *      the API and request the Raspberry Pi Pico to open the cover.
+ *
+ * Parameters
+ * ----------
+ * None
+ *
+ *
+ * Returns
+ * -------
+ * 'E': Error has occurred, or there is no new information on the dashboard
+ *
+ * 'O': The dashboard is requesting for the cover to be opened
+ *
+ * 'C': The dashboard is requesting for the cover to be closed
+*/
+char readFromDashboard () {
+    // Print a status message
+    M5.Lcd.println("Reading from Dashy");
+
+    // If we are connected to WiFi, then read from the dashboard
+    if (WiFi.status () == WL_CONNECTED){
+        long rnd = random(1, 10);
+        HTTPClient client;
+
+        // Connect to the ThingSpeak API
+        client.begin("https://api.thingspeak.com/talkbacks/46995/commands.json?api_key=BBX5Z1T3D26O6RTS");
+
+        int httpCode = client.GET();
+
+        if (httpCode > 0) {
+          // Extract the JSON from the API and store it in 'payload' variable
+          String payload = client.getString();
+
+          // Find the length of the JSON
+          int length_of_payload = payload.length();
+
+          // If length == 2, then there is no data to be retreived because JSON is just "[ ]" - thus return 'E' 
+            // i.e. the JSON hasn't been updated as there has been no buttons pressed
+          if (length_of_payload == LENGTH_OF_EMPTY_JSON) {
+              M5.Lcd.println ("No Data");
+              return 'E';
+
+          }
+
+            // Count the number of quotation marks in the JSON
+            int quote_counter = 0;
+            int index_of_command_string = 0;
+
+            // Find the command string in the JSON - the command string occurs after the 5th quotation mark
+            for (int i = 0; i < length_of_payload; i++) {
+              // We need to find the index of the fifth '"' character
+              if (payload[i] == '"') {
+                quote_counter++;
+
+            }
+
+                // Find the index of the fifth quotation mark in the JSON. The information between the fifth and 
+                // sixth quotation marks is the request from the API i.e. shows if the cover needs to be opened/closed
+                if (quote_counter == THINGSPEAK_API_QUOTATION_NUMBER) {
+                // + 1 because we want the character after the quotation mark
+                index_of_command_string = i + 1;
+                break;
+
+            }
+          }
+
+            // Now that we know the index of the start of the command inside the JSON, we need to store the
+            // entire command section of the JSON inside command_string.
+            char command_string[ARRAY_SIZE];
+
+            // 'IndexCounter' variable used to index the 'command_string' variable seen below
+            int indexCounter = 0;
+
+          if (quote_counter == THINGSPEAK_API_QUOTATION_NUMBER) {
+                
+                // Iterate through JSON between beginning and end of "weather description" section to store this data in 'command_string' variable
+                for (int i = index_of_command_string; i < length_of_payload; i++) {
+                          // Cycle through the payload until the next quote mark if found
+                if (payload[i] == '"') {
+                    break;
+                }
+
+                          // If the character is not a ' " ' (quotation mark), then add it to the command_string
+                else {
+                    command_string[indexCounter] = payload[i];
+                }
+
+                          // Increase the index counter variable
+                indexCounter++;
+
+            }
+
+              // Add a null character to the end of the 'command_string' so that it is actually a string
+              command_string[indexCounter] = '\0';
+
+          }
+
+            // Print the API request (command_string) to the LCD display
+            M5.Lcd.println (command_string);
+
+            // Send a DELETE request back to the API - so the JSON is not used again
+            int httpCode = client.sendRequest ("DELETE");
+
+            // Check if the cover needs to be opened
+            if (command_string[0] == 'O' and command_string[1] == 'P') {
+                writeToAPI();
+                M5.Lcd.println ("Open Sesame");
+                return 'O';
+
+          }
+
+            // Check if the cover needs to be closed
+            if (command_string[0] == 'C' and command_string[1] == 'L') {
+                M5.Lcd.println ("Close Sesame");
+                return 'C';
+
+          }
+
+          // If the JSON didn't specify to open/close the cover, then return 'E'
+          else {
+              return 'E';
+          
+            }
+
+          delay (500);
+
+      }
+
+        // This will hit if there is an error in the HTTP request, it will return 'E' if so.
+        else {
+          Serial2.print ("Error on HTTP request");
+          return 'E';
+        
+        }
+
+    }
+
+    // This will hit if WiFi is never connected, it will return 'E' if so.
+    else {
+        Serial2.print ("Wifi is Not Connected");
+        return 'E';
+
+    }
+
+}
+
+
+/*
+ * This function connects to the WeatherStack API and pulls data from it
+ * related to the current weather of the area.
+ *
+ * This is required when both of the rain sensors are wet, so it is not certain whether
+ * dew or rain has occurred.
+ *
+ * E.g. if the both sensors are wet, then we are unsure whether dew is present, or a combination
+ *      of dew and rain are present. This answers that question.
+ *
+ * Parameters
+ * ----------
+ * None
+ *
+ *
+ * Returns
+ * -------
+ * 1: There is rain present in the area
+ *
+ * 0: There is no rain present in the area, or there is an error (so we assume no rain)
+*/
+int readFromAPI () {
+
+    // If we are connected to WiFi, then read from the WeatherStack API
+    if (WiFi.status () == WL_CONNECTED) {
+        long rnd = random (1, 10);
+        HTTPClient client;
+
+        // Connect to the WeatherStack API
+        client.begin("http://api.weatherstack.com/current?access_key=51775c78bcde4910c305f71db159049e&query=Tennyson");
+        int httpCode = client.GET ();
+
+        if (httpCode > 0) {
+                // Extract the JSON from the API and store it in 'payload' variable
+          String payload = client.getString();
+
+                // Find the length of the JSON
+          int length_of_payload = payload.length();
+
+                // This variable counts the number of square brackets in the JSON
+                // This is important as the 'weather description' information is always
+                // located after the square bracket
+          int square_bracket_counter = 0;
+
+                // This is the index of the beginning of the 'weather descrition' information
+          int index_of_weather_activity = 0;
+
+          // Find the weather descriptions - this will tell us if it is raining or not
+          for (int i = 0; i < length_of_payload; i++) {
+
+              // We need to find the index of the second '[' character, as this is where the weather
+                    // description is always stored
+              if (payload[i] == '[') {
+                square_bracket_counter++;
+
+                if (square_bracket_counter == WEATHERSTACK_API_SQUARE_BRACKET_NUMBER) {
+                            // + 2 because there is a quotation mark after the square bracket before the data begins
+                            // E.g. ( [" )
+                    index_of_weather_activity = i + 2;  
+                    break;
+
+                }
+            }       
+          }
+
+            // Stores the weather activity section of the JSON
+            char weather_activity[ARRAY_SIZE];
+
+            // 'IndexCounter' variable used to index the 'command_string' variable seen below
+            int indexCounter = 0;
+
+                // This if statement will trigger if we have successfully found the 2nd square bracket in the JSON
+          if (square_bracket_counter == WEATHERSTACK_API_SQUARE_BRACKET_NUMBER) {
+
+                // Now we need to store the 'weather description' information (payload) in a string
+                for (int i = index_of_weather_activity; i < length_of_payload; i++) {
+
+              // If we have found a quotation mark, the we know we are at the end of the
+        // weather_description information.
+        if (payload[i] == '"') {
+        break;
+                
+                    }
+
+        // If we don't see a quotation mark, the add the information to the weather_activity array
+        else {
+      weather_activity[indexCounter] = payload[i];
+                
+                    }
+                    
+                    // Increment the index counter
+        indexCounter++;
     
+    }
 
-"""
-Reads the ADC pin connected to the dew sensor output
+                // Add a null character to the end of the array to ensure that we have turned it into a string
+                weather_activity[indexCounter] = '\0';
 
-Parameters:
------------
-None
-
-Returns:
---------
-rain_sensor_value: int: The value of the dew sensor output
-"""
-def read_dew_sensor():
-    dew_sensor_value = dew_sensor.read_u16()
-    return dew_sensor_value
-
-
-"""
-Sets the direction pins connected to the stepper motor drivers
-to spin them clockwise.
-
-Notice how stepper 1 is set to '1' and stepper 2 is set to '0'
-This is because the steppers are facing opposite directions, thus
-their clockwise spin direction must be opposite.
-
-Parameters:
------------
-None
-
-Returns:
---------
-None
-"""
-def clockwise_rotation(): 
-    # Set motor for clockwise rotation
-    # (Note: these must be opoosite as motors are aligned on opposite sides of cover)
-    dir_pin_one.value(1)
-    dir_pin_two.value(0)
-
-
-"""
-Sets the direction pins connected to the stepper motor drivers
-to spin them anticlockwise.
-
-Notice how stepper 1 is set to '0' and stepper 2 is set to '1'
-This is because the steppers are facing opposite directions, thus
-their anticlockwise spin direction must be opposite.
-
-Parameters:
------------
-None
-
-Returns:
---------
-None
-"""
-def anticlockwise_rotation(): 
-    # Set motor for anticlockwise rotation
-    # (Note: these must be opoosite as motors are aligned on opposite sides of cover)
-    dir_pin_one.value(0)
-    dir_pin_two.value(1)
-    
-
-"""
-This rotates the first stepper which is associated with limit switches 1 (open) and 3 (close)
-by sending pulses to the stepper driver.
-
-Parameters:
------------
-None
-
-Returns:
---------
-None
-"""
-def rotate_stepper_one():
-    # Send a rising and falling edge to the stepper driver
-    step_pin_one.value(1)
-    
-    time.sleep(0.002)
-    
-    step_pin_one.value(0)
-    
-    time.sleep(0.002)
-    
-
-"""
-This rotates the second stepper which is associated with limit switches 2 (open) and 4 (close)
-by sending pulses to the stepper driver.
-
-Parameters:
------------
-None
-
-Returns:
---------
-None
-"""
-def rotate_stepper_two():
-    # Send a rising and falling edge to the stepper driver
-    step_pin_two.value(1)
-    
-    time.sleep(0.002)
-    
-    step_pin_two.value(0)
-    
-    time.sleep(0.002)
-    
-
-"""
-This function rotates the steppers to change the position of the cover to OPEN
-The steppers will rotate until limit switches 1 and 2 have been hit by the gantry
-plate.
-
-Parameters:
------------
-None
-
-Returns:
---------
-None
-"""
-def open_cover():
-    
-    # Set the motors for clockwise rotation as we are opening the cover
-    clockwise_rotation()
-    start_time = time.time()
-
-    # Rotate the steppers until limit switches 1 and 2 are closed
-    while True:
-        if not limit_switch_two.value():
-            rotate_stepper_one()
+          }
             
-        if not limit_switch_two.value():
-            rotate_stepper_two()
+            // Some print messages for the LCD display on the M5StickC
+            M5.Lcd.println("We are in");
+            M5.Lcd.println(weather_activity);
+
+            // Now that we have the weather_activity array, we need to check for rain inside it.
+            // Here, we are cycling through the array checking for the letters 'R' and 'a' 
+            // next to each other which indicate rain.
+            for (int i = 1; i < sizeof (weather_activity) - 1; i++) {
+
+                // Check for the letters 'R' and 'a' next to each other
+                if ((weather_activity[i] == 'a') and (weather_activity[i - 1] == 'R')) {
+                    // Some print messages for the LCD of the M5StickC
+                    M5.Lcd.println ("LOWELL RAINS");
+                    Serial2.print ('Y');
+
+                    // Update the web dashboard to show cover opening
+                    writeToAPI();
+
+                    // If there is rain, then return 1
+                    return 1;
+
+                }
+            }
             
-        if limit_switch_two.value():
-            return
-        
-        # Incase the limit switches haven't closed after 37 seconds, then stop them 
-        # (as there may be a hardware error)
-        if time.time() - start_time > 37:
-            return
+            // Delay for 500ms
+      delay (500);
 
-        
-"""
-This function rotates the steppers to change the position of the cover to OPEN
-The steppers will rotate until limit switches 3 and 4 have been hit by the gantry
-plate.
+  }
 
-Parameters:
------------
-None
+        // This will hit if there is an error in the HTTP request, it will return 0 if so.
+        else {
+            Serial2.print ("Error on HTTP request");
+            return 0;
+  }
 
-Returns:
---------
-None
-"""
-def close_cover():
+    }
+
+    // This will hit if WiFi is never connected, it will return 0 if so.
+    else {
+        Serial2.print ("Wifi is Not Connected");
+        return 0;
+
+    }
     
-    # Set the motors for clockwise rotation as we are opening the cover
-    anticlockwise_rotation()
-    start_time = time.time()
+    // If there are any other errors, this will return 0 (this should never trigger)
+    return 0;
 
-    # Rotate the steppers until limit switches 3 and 4 are closed
-    while True:
-        if not limit_switch_three.value():
-            rotate_stepper_one()
+}
+
+
+/*
+ * This function scans the UART RX pin on the M5StickC for any messages from the Raspberry Pi Pico
+ * 
+ * Possible messages include:
+ * 'R': The Raspberry Pi Pico is wanting the M5StickC to check for rain in the WeatherStack API
+ * 'D': The Raspberry Pi Pico is wanting the M5StickC to check for the Thingspeak dashboard for any
+ *      button presses (e.g. open  cover, close cover)
+ * 'T': The Raspberry Pi Pico is wanting the M5StickC to upload 'open' data to the web dashboard's
+ *       'Total Times Cover Opened' graph
+ *
+ * Parameters
+ * ----------
+ * None
+ *
+ *
+ * Returns
+ * -------
+ * -1: If there is no message received from the Raspberry Pi Pico (do nothing)
+ *
+ * 0: If there is an invalid message received from the Raspberry Pi Pico (do nothing)
+ *
+ * 1: If an 'R' is received from the Raspberry Pi Pico, prompting the M5StickC to check the WeatherStack API
+ *
+ * 2: If a 'D' is received from the Raspberry Pi Pico, prompting the M5StickC to check the web dashboard
+*/
+int scanUART () {
+
+    // Scan the UART RX pin of the M5StickC for any transmissions from the Raspberry Pi Pico
+    if (Serial2.available ()) {
+
+        // Store any received character inside the 'receivedString' variable
+        char receivedString = Serial2.read();
         
-        if not limit_switch_four.value():
-            rotate_stepper_two()
-            
-        if limit_switch_three.value() and limit_switch_four.value():
-            return
+
+        // Some printed messages to the LCD screen
+        M5.Lcd.println("rec string");
+        M5.Lcd.println(receivedString);
+        M5.Lcd.println(int(receivedString));
+
+        // If an 'R' is received, then we need to check the WeatherStack API for weather data.
+        // Thus return 1
+        if (receivedString == 'R') {
+          M5.Lcd.print("received R");
+          uart_flag = 1;
+          return 1;
+        }
+
+        // If a 'D' is received, then we need to check the the ThingSpeak dashboard for any button presses
+        // Thus return 2
+        if (receivedString == 'D') {
+            M5.Lcd.println ("It Worked!");
+            uart_flag = 2;
+            return 2;  
+        }
+
+        // If a 68 is received, then we need to check the the ThingSpeak dashboard for any button presses
+        // Thus return 2 (68 is ASCII for 'D') - this if statement should be irrelevant
+        if (int(receivedString) == 68) {
+            M5.Lcd.println ("integer worked");
+            uart_flag = 2;
+            return 2;
+        }
+
+        // If a 'T' is received, then we need to post a '1' to the web dashboard to update the 'Total Times Cover Opened'
+        // graph.
+        if (receivedString == 'T') {
+            uart_flag = 3;
+            return 3;
+
+      }
+
+        // This will trigger if there is an invalid message received from the Raspberry Pi Pico. Thus, nothing will happen.
+        uart_flag = 0;
+        return 0;
+
+    }
+
+    // If there is no message received from the Raspberry Pi Pico, then we return -1, and nothing will happen.
+    return -1;
+
+}
+
+
+/*
+ * Initialisation function for the M5StickC, this will run when the system is turned on 
+ * or woken up from sleep
+ *
+ * Parameters
+ * ----------
+ * None
+ *
+ *
+ * Returns
+ * -------
+ * None
+*/
+void setup () {
+
+    // Initialise M5StickC
+    M5.begin ();
+
+    // Set up a serial connection 
+    Serial2.begin (115200, SERIAL_8N1, GPIO_PIN_26_M5, GPIO_PIN_0_M5);
+
+
+    // Fill the screen Black (testing)
+    M5.Lcd.fillScreen (BLACK);
+
+    // Turn off the screen
+    //M5.Lcd.writecommand(ST7735_DISPOFF);
+    //M5.Axp.ScreenBreath(0);
+
+    // Set the deep sleep wakeup to be when GPIO pin 36 reads a high input
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, HIGH_INPUT);
+
+}
+
+
+/*
+ * This function is the main loop of the program. It will always execute after the setup() function.
+ *
+ * Parameters
+ * ----------
+ * None
+ *
+ *
+ * Returns
+ * -------
+ * None
+*/
+void loop () {
+
+    // The 'sleep_count' variable tracks the number of times the M5StickC has slept
+    if (sleep_count != 0) {
         
-        # Incase the limit switches haven't closed after 37 seconds, then stop them 
-        # (as there may be a hardware error)
-        if time.time() - start_time > 37:
-            return
+        // Take the 'reference' time in ticks
+        long int start_time = millis();
 
-"""
-This function will be called when the cover is in the closed state.
-It reads both of the rain sensors and opens the cover accordingly.
+        // Scan the UART RX pin for a message from pico
+        while (scanUART() == -1) {
 
-If the rain sensor is wet and the dew sensor is dry, the cover will open.
+            // Take the current time in ticks
+          long int current_time = millis();
 
-If both sensors are wet, there may be dew or dew AND rain. Thus a message will
-be send to the M5StickC over UART to check the WeatherStack API.
-
-Parameters:
------------
-None
-
-Returns:
---------
-0: Cover Closed
-1: Cover Opened
-"""
-def cover_closed_rain_sensor_check():
-
-    # Read the rain and dew sensor values
-    rain_sensor_value = read_rain_sensor()
-    dew_sensor_value = read_dew_sensor()
-    
-    # Some print messages for debugging
-    print(rain_sensor_value)
-    print(dew_sensor_value)
-    print("Here we are")
+            // If there is no message received from the Raspberry Pi Pico after 20 seconds
+            // then go back to deep sleep
+          if (current_time - start_time >= 20000) {
+              esp_deep_sleep_start();
+          
+            }
        
-    # Check if one sensor is wet - if this is the case then we need to open the cover
-    if ((rain_sensor_value < ADC_RAIN_THRESHOLD) and (dew_sensor_value > ADC_RAIN_THRESHOLD)):
-        send_to_dashboard()
-        open_cover()
+        }
+
+        // Connect to the wifi
+        connectToWifi();
         
-        return 1
-    
-    # Check if both sensors are wet - if this is the case then there is dew present.
-    # This means that there could be (dew) or (rain AND dew) so need to consult with the
-    # M5 to find out if it is raining
-    if ((rain_sensor_value < ADC_RAIN_THRESHOLD) and (dew_sensor_value < ADC_RAIN_THRESHOLD)):
-        
-        # Wake up the M5StickC by setting a pin to high
-        wake_up_pin.value(1)
-        time.sleep(2)
-        wake_up_pin.value(0)
-        
-        # Print statement for debugging
-        print("Sending R's")
-        # Send a string of 'R' to the M5StickC. Wait for the M5 to reply and set this 
-        # reply equal to "serial_string"
-        serial_string = read_uart("RRRRRRRRRRRR")
-
-        # Print statements for debugging
-        print('serial string')
-        print(serial_string)
-        
-        # If string == y, then API says rain is present
-        if(serial_string == b'Y'):
-            print("API detects rain")
-            send_to_dashboard()
-            open_cover()
-    
-            return 1        
-            
-        else:
-            return 0
-    
-    
-"""
-This function will be called when the cover is in the open state.
-It reads both of the rain sensors and closes the cover accordingly.
-
-If neither of the sensors are wet, then the cover will be closed,
-otherwise it will remain open.
-
-Parameters:
------------
-None
-
-Returns:
---------
-0: Cover Opened
-1: Cover Closed
-"""
-def cover_open_rain_sensor_check():
-    # Read the rain and dew sensor
-    rain_sensor_value = read_rain_sensor()
-    dew_sensor_value = read_dew_sensor()
-    
-    # Some print statements for debugging
-    print(rain_sensor_value)
-    print(dew_sensor_value)
-    
-    # If both sensors are dry, then we need to close the cover
-    if (rain_sensor_value > ADC_RAIN_THRESHOLD and dew_sensor_value > ADC_RAIN_THRESHOLD):
-        close_cover()
-        return 1
-    
-    else:
-        return 0
+        // Some print messages
+        M5.Lcd.println("UART FLAG");
+        M5.Lcd.println(uart_flag);
 
 
-"""
-This function will be called when we need to check whether a command has
-been sent from the ThingSpeak dashboard.
+        // If the uart_flag == 1, then there has been a message to read the WeatherStack API
+        if (uart_flag == 1) {
+          // Read from the API to check if it's raining
+          if (readFromAPI() == 1) {
+              // Send a message to the Raspberry Pi Pico to open the cover
+              Serial2.print('Y');
 
-This function sends a message to the M5StickC to connect to the dashboard,
-and then waits for a message back from the M5StickC.
+          }
+      
+            else {
+                // Send a message to the Raspberry Pi Pico to close the cover
+              Serial2.print('N');
+                
+          }
 
-If a b'Y' is received, then the cover will be opened
-If a b'N' is received, then the cover will be closed
-Otherwise the cover will remain in the same state
-
-Parameters:
------------
-None
-
-Returns:
---------
--1: Do nothing
- 0: Open the cover
- 1: Close the cover
-"""
-def check_online_dashboard():
-    # Wake up the M5StickC by setting a pin to high
-    wake_up_pin.value(1)
-    time.sleep(2)
-    wake_up_pin.value(0)
-    
-    # Take the current time
-    start_time = time.time()
-    count = 0
-    
-    # Send a string of 'D' to the M5StickC to request it to check the web dashboard.
-    # Store the response in 'string_from_wifi'
-    string_from_wifi = read_uart("DDDDDDDDDD")
-    
-    # Take action based on the response of the M5
-    if string_from_wifi != None:
-        # Some print statements for debugging
-        print("String from WiFi")
-        print(string_from_wifi)
-        
-        # If string == y, then online dashboard asks to open cover
-        if string_from_wifi == b'Y':
-            print("Dashboard Said to Open")
-            led_pin.value(0)
-            return 1
-            
-        # If string == 'N', then online dashboard asks to close cover
-        elif string_from_wifi == b'N': 
-            print("Dashboard Said to Close")
-            led_pin.value(0)
-            return 0
-        
-        # If string does not equal anything else, we assume the dashboard has not
-        # been updated, thus we do nothing.
-        else:
-            print("Dashboard Not Updated at all")
-            #led_pin.value(1)
-            return -1
-        
-    else:
-        # Print statement for debugging
-        print("nothing received")
-    
-
-"""
-This function whenever we need to send the M5StickC a message.
-
-It firstly sends a message (in the input parameters) to the M5StickC via UART
-It then waits for a response. If there is no response after 30 seconds, it assumes
-an error has occurred and times out (returns b'b').
+      }
 
 
-Parameters:
------------
-string_to_send: String: The string to be sent to the M5StickC
+        // This will trigger if a message has been sent from the online dashboard
+        if (uart_flag == 2) {
+      char dashboard_flag;
 
-Returns:
---------
-string_final: String: The string received from the M5StickC
-"""
-def read_uart(string_to_send):
+            // A print message for the screen
+      M5.Lcd.println("Checking Dashboard");
 
-    # Print statement for debugging
-    print("sent a string")
+            // Read from the dashboard
+      dashboard_flag = readFromDashboard();
 
-    # Write the input parameter string to the M5StickC
-    uartPin.write(string_to_send)
-    
-    # Take the current time
-    starting_time = time.time()
-    
-    while 1:
-        
-        # If there is no response from the M5StickC after 30 seconds, then do nothing
-        if time.time() - starting_time > 30:
-            string_final = b'b'
-            return
-        
-        # Red the UART RX pin for response from the M5StickC
-        string_received = uartPin.read() 
-        
-        # Store the string we receive from the M5StickC in 'string_final'
-        if string_received != None:
-            string_final = string_received
-            break
-        
-    return string_final
-    
+      // Open the cover
+      if (dashboard_flag == 'O') {
+          Serial2.print('Y');
 
-"""
-This function whenever we need to check the ThingSpeak dashboard
+      }
 
-It firstly calls the check_online_dashboard() function, and then based on
-what this function returns, it opens/closes the cover.
+      // Close the cover
+      if (dashboard_flag == 'C') {
+          Serial2.print('N');
 
-If it opens the cover, it will also send a message to the M5StickC to update
-the ThingSpeak dashboard 'Total Times Cover Opened' graph.
+      }
 
+      // Error/do nothing
+      if (dashboard_flag == 'E') {
+          Serial2.print('Z');
 
-Parameters:
------------
-cover_state: int: The current state of the cover (OPEN/CLOSED)
+      }
+  }
 
-Returns:
---------
-cover_state: int: The new state of the cover (OPEN/CLOSED)
-"""
-def dashboard_action(cover_state):
-    
-    # Check the online dashboard for any commands
-    dashboard_flag = check_online_dashboard()
+        // Send data to thingspeak dashboard
+        if (uart_flag == 3) {
+      writeToAPI();
 
-    # Some print statements for debugging
-    print("Dashboard_Flag")
-    print(dashboard_flag)
+  }
 
-    # If the cover is currently CLOSED, and the dashboard returned '1' (open cover),
-    # then open the cover
-    if dashboard_flag == 1 and cover_state == CLOSED:
+    }
 
-        # Send a message to the M5StickC to update the 'Total Times Cover Opened' graph
-        send_to_dashboard()
+    // Reset the UART flag to 0
+    uart_flag = 0;
 
-        # Open the cover
-        open_cover()
+    // Increment the sleep count
+    sleep_count += 1;
 
-        #Update the cover state
-        cover_state = OPEN
-        return cover_state
-        
-    # If the cover is currently OPEN, and the dashboard returned '0' (close cover),
-    # then close the cover
-    elif dashboard_flag == 0 and cover_state == OPEN:
+    // Deep sleep the M5StickC
+    esp_deep_sleep_start();
 
-        # Close the cover
-        close_cover()
-
-        # Update the cover state as closed
-        cover_state = CLOSED
-        return cover_state
-        
-    # If the dashboard has not updated, then do nothing and keep the cover state the same
-    else:
-        # Do nothing
-        return cover_state
-       
-        
-
-"""
-This function whenever we need to check the rain sensor values
-
-It firstly calls the cover_open_rain_sensor_check() or cover_closed_rain_sensor_check()
-functions, and then based on what these functions return, the cover will either open or close.
-
-Parameters:
------------
-cover_state: int: The current state of the cover (OPEN/CLOSED)
-
-Returns:
---------
-cover_state: int: The new state of the cover (OPEN/CLOSED)
-"""
-def rain_sensor_action(cover_state):
-
-    # If the cover is open, then check the rain sensors and take action accordingly
-    if cover_state == OPEN:
-        if(cover_open_rain_sensor_check()):
-            cover_state = CLOSED
-            return cover_state
-        
-    # If the cover state is open, then we want to check for rain.
-    # If there is rain then we will close the cover
-    if cover_state == CLOSED:
-        if(cover_closed_rain_sensor_check()):
-            cover_state = OPEN
-            return cover_state
-    
-    return cover_state
-    
-
-"""
-This function sends data to the web dashboard when the cover is opened.
-
-Each time the cover is opened, the 'Total Times Cover Opened' graph on the 
-ThingSpeak dashboard needs to be updated.
-
-The letter 'T' is sent to the dashboard for 'ThingSpeak'
-
-Parameters:
------------
-None
-
-Returns:
---------
-None
-"""
-def send_to_dashboard():
-    # Wake up the M5StickC by sending a rising and falling edge
-    wake_up_pin.value(1)
-    time.sleep(2)
-    wake_up_pin.value(0)
-    
-    # Send a string of 'T' to the M5StickC to request it to update the
-    # 'Total Times Cover Opened' graph on the ThingSpeak dashboard.
-    uartPin.write("TTTTTTTTTTT")
-
-
-"""
-This is the main loop of the program.
-
-Parameters:
------------
-None
-
-Returns:
---------
-None
-"""
-def main():
-    
-    # Firstly - open the cover to calibrate limit switches
-    open_cover()
-    cover_state = OPEN
-    
-    # Wait for 1 second before continuing
-    time.sleep(1)
- 
-    # Main loop
-    while True:
-        # Check the ThingSpeak dashboard for any commands
-        cover_state = dashboard_action(cover_state)
-
-        # Some print statements for debugging
-        print("State of Cover")
-        print(cover_state)
-
-        # Sleep for 30 seconds
-        time.sleep(30)
-        
-        # Check the rain sensors and take action accordingly
-        # If the cover state is open, then we want to check for no rain.
-        # If the ADC is dry, then we will close the cover
-        cover_state = rain_sensor_action(cover_state)
-            
-        # Sleep for 30 seconds
-        time.sleep(30)
-        
-
-# Automatically run main on startup
-if __name__ == "__main__":
-    main()
-
+}
 
