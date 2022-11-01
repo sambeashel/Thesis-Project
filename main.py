@@ -1,31 +1,7 @@
-Skip to content
-Search or jump to…
-Pull requests
-Issues
-Marketplace
-Explore
- 
-@sambeashel 
-sambeashel
-/
-Thesis-Project
-Public
-Code
-Issues
-Pull requests
-Actions
-Projects
-Wiki
-Security
-Insights
-Settings
-Thesis-Project/M5StickC_Code.ino
-@sambeashel
-sambeashel Update M5StickC_Code.ino
-Latest commit d74a9b0 11 days ago
- History
- 1 contributor
-619 lines (457 sloc)  15.2 KB
+# This code is for the Raspberry Pi Pico
+# Creator: Samuel Beashel
+# Project: Farmbot Water Tank Smart Cover (ENGG4811)
+# The University of Queensland
 
 from machine import Pin, UART
 import time
