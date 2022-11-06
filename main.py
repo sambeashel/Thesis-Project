@@ -1,7 +1,13 @@
-# This code is for the Raspberry Pi Pico
-# Creator: Samuel Beashel
-# Project: Farmbot Water Tank Smart Cover (ENGG4811)
-# The University of Queensland
+########################################################
+########################################################
+##                                                    ##
+## This code is for the Raspberry Pi Pico             ##
+## Creator: Samuel Beashel                            ##
+## Project: Farmbot Water Tank Smart Cover (ENGG4811) ##
+## The University of Queensland                       ##
+##                                                    ##
+########################################################
+########################################################
 
 from machine import Pin, UART
 import time
