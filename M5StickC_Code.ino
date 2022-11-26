@@ -49,8 +49,8 @@
 #define GPIO_PIN_0_M5 0
 
 // WiFi network credentials
-const char *WIFI_NETWORK_NAME = "Samuel's iPhone";
-const char *WIFI_PASSWORD = "beashel123";
+const char *WIFI_NETWORK_NAME = "infrastructure";
+const char *WIFI_PASSWORD = "evSaEGgy-aGF";
 
 // Global counter of how many times sleep mode has been activated
 // RTC_DATA_ATTR is used so this is kept in memorynot  during deep sleep
