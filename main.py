@@ -13,7 +13,7 @@ from machine import Pin, UART
 import time
 
 # Define Constants
-ADC_RAIN_THRESHOLD = 50000
+ADC_RAIN_THRESHOLD = 30000
 
 # Global Variables
 global OPEN
@@ -202,13 +202,13 @@ def open_cover():
 
     # Rotate the steppers until limit switches 1 and 2 are closed
     while True:
-        if not limit_switch_two.value():
+        if not limit_switch_one.value():
             rotate_stepper_one()
             
         if not limit_switch_two.value():
             rotate_stepper_two()
             
-        if limit_switch_two.value():
+        if limit_switch_two.value() and limit_switch_one.value():
             return
         
         # Incase the limit switches haven't closed after 37 seconds, then stop them 
@@ -244,7 +244,7 @@ def close_cover():
         if not limit_switch_four.value():
             rotate_stepper_two()
             
-        if limit_switch_three.value() and limit_switch_four.value():
+        if limit_switch_four.value() and limit_switch_three.value():
             return
         
         # Incase the limit switches haven't closed after 37 seconds, then stop them 
@@ -612,7 +612,7 @@ def main():
         print(cover_state)
 
         # Sleep for 30 seconds
-        time.sleep(10)
+        time.sleep(600)
         
         # Check the rain sensors and take action accordingly
         # If the cover state is open, then we want to check for no rain.
@@ -620,11 +620,9 @@ def main():
         cover_state = rain_sensor_action(cover_state)
             
         # Sleep for 30 seconds
-        time.sleep(10)
+        time.sleep(600)
         
 
 # Automatically run main on startup
 if __name__ == "__main__":
     main()
-
-
