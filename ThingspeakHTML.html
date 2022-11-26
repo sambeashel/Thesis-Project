@@ -1,1 +1,78 @@
+<!DOCTYPE html>
+<html style="height: 100%;">
+<head>
+  <style>
+    .button {
+      border: none;
+      color: white;
+      padding: 15px 32px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 4px 2px;
+      cursor: pointer;
+      transition: 0.4s;
+    }
+    
+     .button1 {background-color: #4CAF50;} /* Green */
+    
+    .button1:hover {
+      background-color: #3A8B3D;
+      color: white;
+    }
+    
+    
+    
+    .button2 {background-color: #4CAF50;} /* Green */
+    
+    .button2:hover {
+      background-color: #3A8B3D;
+      color: white;
+    }
+    
+    
+    
+  </style>
+  
+  
+<script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+ 
+<style type="text/css">
+ body { background-color: black; }
+</style>
+ 
+ <script type="text/javascript">
+ function openCover(){
+$.post('https://api.thingspeak.com/talkbacks/46995/commands.json?api_key=BBX5Z1T3D26O6RTS&command_string=OPEN&position=1');
+}
+   
+ function closeCover(){
+$.post('https://api.thingspeak.com/talkbacks/46995/commands.json?api_key=BBX5Z1T3D26O6RTS&command_string=CLOSE&position=1');
+}
+</script>
+ 
+<center>
+  <h1 style = "color:white; font-family:Helvetica,sans serif;">Farmbot Smart Cover Dashboard</h1>
+  </center>
 
+  
+</head>
+<body>
+  <center>
+<button class = "button button1" onclick="openCover()">Open Cover</button>
+<button class = "button button2" onclick="closeCover()">Close Cover</button>
+  </center>
+  
+  <center>
+    
+    <iframe width="450" height="260" style="margin:35px 35px 0 0 ; border: 1px solid #cccccc;" src="https://thingspeak.com/channels/1895122/charts/1?bgcolor=%23ffffff&color=%23d62020&dynamic=true&results=60&type=line"></iframe>
+  <iframe width="450" height="260" style="border: 1px solid #cccccc;" src="https://thingspeak.com/channels/1895122/maps/channel_show"></iframe>
+  </center>
+  
+  <center>
+    <iframe width="450" height="260" style="margin:35px 35px 0 0 ; border: 1px solid #cccccc;" src="https://thingspeak.com/channels/1735131/charts/1?bgcolor=%23ffffff&color=%23d62020&dynamic=true&results=10&type=line"></iframe>
+    <iframe width="450" height="260" style="border: 1px solid #cccccc;" src="https://thingspeak.com/channels/1884761/charts/1?bgcolor=%23ffffff&color=%23d62020&dynamic=true&results=10&type=line"></iframe>
+  </center>
+  </body>
+</html>
